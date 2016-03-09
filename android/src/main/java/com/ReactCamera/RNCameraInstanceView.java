@@ -1,26 +1,36 @@
 package com.ReactCamera;
 
 import android.content.Context;
-import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.hardware.Camera;
+import android.media.ExifInterface;
 import android.os.Environment;
 import android.util.Log;
-import android.view.Display;
 import android.view.Surface;
 import android.view.View;
-import android.view.WindowManager;
-import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
 
+import com.drew.imaging.ImageMetadataReader;
+import com.drew.imaging.ImageProcessingException;
+import com.drew.metadata.Metadata;
+import com.drew.metadata.MetadataException;
+import com.drew.metadata.exif.ExifIFD0Directory;
+import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.uimanager.ThemedReactContext;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
+import java.util.TimeZone;
 
 import me.dm7.barcodescanner.core.CameraPreview;
 import me.dm7.barcodescanner.core.CameraUtils;
@@ -30,7 +40,7 @@ import me.dm7.barcodescanner.core.ViewFinderView;
 /**
  * Created by northfoxz on 2016/1/7.
  */
-public abstract class RNCameraInstanceView extends FrameLayout implements Camera.PreviewCallback {
+public abstract class RNCameraInstanceView extends RelativeLayout implements Camera.PreviewCallback {
     private Camera mCamera;
     private RelativeLayout mCameraView;
     private CameraPreview mPreview;
@@ -189,54 +199,140 @@ public abstract class RNCameraInstanceView extends FrameLayout implements Camera
 
     }
 
-    public void takePicture() {
+    public void takePicture(final ReadableMap options) {
         // get an image from the camera
-        mCamera.takePicture(null, null, mPicture);
+        mCamera.takePicture(null, null, new Camera.PictureCallback() {
+
+            @Override
+            public void onPictureTaken(byte[] data, Camera camera) {
+
+                File pictureFile = getOutputMediaFile(options.getString("androidPath"));
+                if (pictureFile == null){
+                    returnPictureTakenResult("error", "directory error");
+                    mCamera.startPreview();
+                    return;
+                }
+
+                Bitmap image = BitmapFactory.decodeByteArray(data, 0, data.length);
+
+                try {
+
+                    // Extract metadata.
+                    final Metadata metadata = ImageMetadataReader.readMetadata(new BufferedInputStream(new ByteArrayInputStream(data)), false);    // true for streaming
+
+                    // Get the EXIF orientation.
+                    final ExifIFD0Directory exifIFD0Directory = metadata.getDirectory(ExifIFD0Directory.class);
+                    if(exifIFD0Directory.containsTag(ExifIFD0Directory.TAG_ORIENTATION))
+                    {
+                        final int exifOrientation = exifIFD0Directory.getInt(ExifIFD0Directory.TAG_ORIENTATION);
+
+                        final Matrix bitmapMatrix = new Matrix();
+                        switch(exifOrientation)
+                        {
+                            case 1:                                                                                     break;  // top left
+                            case 2:                                                 bitmapMatrix.postScale(-1, 1);      break;  // top right
+                            case 3:         bitmapMatrix.postRotate(180);                                               break;  // bottom right
+                            case 4:         bitmapMatrix.postRotate(180);           bitmapMatrix.postScale(-1, 1);      break;  // bottom left
+                            case 5:         bitmapMatrix.postRotate(90);            bitmapMatrix.postScale(-1, 1);      break;  // left top
+                            case 6:         bitmapMatrix.postRotate(90);                                                break;  // right top
+                            case 7:         bitmapMatrix.postRotate(270);           bitmapMatrix.postScale(-1, 1);      break;  // right bottom
+                            case 8:         bitmapMatrix.postRotate(270);                                               break;  // left bottom
+                            default:                                                                                    break;  // Unknown
+                        }
+
+                        // Create new bitmap.
+                        image = Bitmap.createBitmap(image, 0, 0, image.getWidth(), image.getHeight(), bitmapMatrix, false);
+                    }
+
+                    FileOutputStream fos = new FileOutputStream(pictureFile);
+                    image.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+                    fos.close();
+
+                    if (options.hasKey("metadata") && options.getMap("metadata").hasKey("location")) {
+                        double timestamp = options.getMap("metadata").getMap("location").getDouble("timestamp");
+                        ReadableMap location = options.getMap("metadata").getMap("location").getMap("coords");
+                        ExifInterface exif = new ExifInterface(pictureFile.getAbsolutePath());
+
+
+
+                        String altitudeRef;
+                        double altitude = location.getDouble("altitude");
+                        if (location.getDouble("altitude") < 0) {
+                            altitudeRef = "1";
+                            altitude = -altitude;
+                        } else {
+                            altitudeRef = "0";
+                        }
+                        exif.setAttribute("GPSAltitude", String.valueOf(altitude));
+                        exif.setAttribute("GPSAltitudeRef", altitudeRef);
+
+                        String latitudeRef;
+                        double latitude = location.getDouble("altitude");
+                        if (location.getDouble("latitude") < 0) {
+                            latitudeRef = "S";
+                            latitude = -latitude;
+                        } else {
+                            latitudeRef = "N";
+                        }
+                        exif.setAttribute("GPSLatitude", String.valueOf(latitude));
+                        exif.setAttribute("GPSLatitudeRef", latitudeRef);
+
+
+                        String longitudeRef;
+                        double longitude = location.getDouble("altitude");
+                        if (location.getDouble("longitude") < 0) {
+                            longitudeRef = "W";
+                            longitude = -longitude;
+                        } else {
+                            longitudeRef = "E";
+                        }
+                        exif.setAttribute("GPSLongitude", String.valueOf(longitude));
+                        exif.setAttribute("GPSLongitudeRef", longitudeRef);
+
+                        Calendar initialDate = Calendar.getInstance();
+                        initialDate.setTimeInMillis((long) timestamp);
+                        initialDate.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+                        SimpleDateFormat ts = new SimpleDateFormat("HH:mm:ss.SSSSSS");
+                        SimpleDateFormat ds = new SimpleDateFormat("yyyy:MM:dd");
+
+                        exif.setAttribute("GPSTimeStamp", ts.format(initialDate.getTime()));
+                        exif.setAttribute("GPSDateStamp", ds.format(initialDate.getTime()));
+
+                        exif.saveAttributes();
+                    }
+
+                    // Restart the camera preview.
+                    returnPictureTakenResult("success", pictureFile.getAbsolutePath());
+                    mCamera.startPreview();
+                } catch (FileNotFoundException e) {
+                    returnPictureTakenResult("error", "file not found");
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    returnPictureTakenResult("error", "an exception error");
+                    e.printStackTrace();
+                } catch (ImageProcessingException e) {
+                    returnPictureTakenResult("error", "an ip exception error");
+                    e.printStackTrace();
+                } catch (MetadataException e) {
+                    returnPictureTakenResult("error", "an md exception error");
+                    e.printStackTrace();
+                }
+            }
+        });
     }
-    /**
-     * Picture Callback for handling a picture capture and saving it out to a file.
-     */
-    private Camera.PictureCallback mPicture = new Camera.PictureCallback() {
-
-        @Override
-        public void onPictureTaken(byte[] data, Camera camera) {
-
-            File pictureFile = getOutputMediaFile();
-            if (pictureFile == null){
-                returnPictureTakenResult("error", "directory error");
-                mCamera.startPreview();
-                return;
-            }
-
-            try {
-                FileOutputStream fos = new FileOutputStream(pictureFile);
-                fos.write(data);
-                fos.close();
-
-                // Restart the camera preview.
-                returnPictureTakenResult("success", pictureFile.getAbsolutePath());
-                mCamera.startPreview();
-            } catch (FileNotFoundException e) {
-                returnPictureTakenResult("error", "file not found");
-                e.printStackTrace();
-            } catch (IOException e) {
-                returnPictureTakenResult("error", "an exception error");
-                e.printStackTrace();
-            }
-        }
-    };
 
     /**
      * Used to return the camera File output.
      * @return
      */
-    private File getOutputMediaFile(){
+    private File getOutputMediaFile(String path){
         try {
 
             // Create a media file name
             String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
             String root = Environment.getExternalStorageDirectory().toString();
-            File myDir = new File(root + "/rncamera");
+            File myDir = new File(path);
             myDir.mkdirs();
             if(myDir.exists())
                 Log.v("camera", "directory created");

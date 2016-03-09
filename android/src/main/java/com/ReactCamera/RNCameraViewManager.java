@@ -3,7 +3,7 @@ package com.ReactCamera;
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.common.MapBuilder;
-import com.facebook.react.uimanager.ReactProp;
+import com.facebook.react.uimanager.annotations.ReactProp;
 import com.facebook.react.uimanager.ThemedReactContext;
 import com.facebook.react.uimanager.ViewGroupManager;
 
@@ -117,7 +117,7 @@ public class RNCameraViewManager extends ViewGroupManager<RNCameraView> implemen
             @Nullable ReadableArray args) {
         switch (commandId) {
             case TAKE_PICTURE:
-                root.takePicture();
+                root.takePicture(args.getMap(0));
                 break;
         }
     }
@@ -139,7 +139,7 @@ public class RNCameraViewManager extends ViewGroupManager<RNCameraView> implemen
     }
 
     @Override
-    public void onDropViewInstance(ThemedReactContext reactContext, RNCameraView view) {
+    public void onDropViewInstance(RNCameraView view) {
         mCameraViewVisible = false;
         view.stopCamera();
     }

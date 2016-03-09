@@ -54,11 +54,11 @@ var CameraView = React.createClass({
     );
   },
 
-  takePicture: function() {
+  takePicture: function(opts) {
     UIManager.dispatchViewManagerCommand(
       this._getCameraLayoutHandle(),
       UIManager.RNCameraView.Commands.takePicture,
-      null
+      [opts]
     );
   },
 
