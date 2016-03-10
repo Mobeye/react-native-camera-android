@@ -41,6 +41,13 @@ public class RNCameraViewManager extends ViewGroupManager<RNCameraView> implemen
         }
     }
 
+    @ReactProp(name = "pictureOrientation")
+    public void setPictureOrientation(RNCameraView view, @Nullable String pictureOrientation) {
+        if(pictureOrientation !=  null) {
+            view.setPictureOrientation(pictureOrientation);
+        }
+    }
+
     @ReactProp(name = "viewFinderBackgroundColor")
     public void setViewFinderBackgroundColor(RNCameraView view, @Nullable String viewFinderBackgroundColor) {
         if (viewFinderBackgroundColor != null) {

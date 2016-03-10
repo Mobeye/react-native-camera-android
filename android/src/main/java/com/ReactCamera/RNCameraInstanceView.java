@@ -48,6 +48,7 @@ public abstract class RNCameraInstanceView extends RelativeLayout implements Cam
     private Rect mFramingRectInPreview;
     private ThemedReactContext mContext;
     private boolean mViewFinderDisplay;
+    private String mPictureOrientation;
 
     public RNCameraInstanceView(ThemedReactContext context) {
         super(context);
@@ -120,7 +121,7 @@ public abstract class RNCameraInstanceView extends RelativeLayout implements Cam
     public void stopCamera() {
         if(this.mCamera != null) {
             this.mPreview.stopCameraPreview();
-            this.mPreview.setCamera((Camera)null, (Camera.PreviewCallback)null);
+            this.mPreview.setCamera((Camera) null, (Camera.PreviewCallback) null);
             this.mCamera.release();
             this.mCamera = null;
         }
@@ -199,6 +200,10 @@ public abstract class RNCameraInstanceView extends RelativeLayout implements Cam
 
     }
 
+    public void setPictureOrientation(String orientation) {
+        mPictureOrientation = orientation;
+    }
+
     public void takePicture(final ReadableMap options) {
         // get an image from the camera
         mCamera.takePicture(null, null, new Camera.PictureCallback() {
@@ -243,6 +248,21 @@ public abstract class RNCameraInstanceView extends RelativeLayout implements Cam
                         // Create new bitmap.
                         image = Bitmap.createBitmap(image, 0, 0, image.getWidth(), image.getHeight(), bitmapMatrix, false);
                     }
+
+                    final Matrix bitmapOrientationMatrix = new Matrix();
+                    switch(mPictureOrientation) {
+                        case "PORTRAITUPSIDEDOWN":
+                            bitmapOrientationMatrix.postRotate(180);
+                            break;
+                        case "LANDSCAPELEFT":
+                            bitmapOrientationMatrix.postRotate(270);
+                            break;
+                        case "LANDSCAPERIGHT":
+                            bitmapOrientationMatrix.postRotate(90);
+                            break;
+                    }
+
+                    image = Bitmap.createBitmap(image, 0, 0, image.getWidth(), image.getHeight(), bitmapOrientationMatrix, false);
 
                     FileOutputStream fos = new FileOutputStream(pictureFile);
                     image.compress(Bitmap.CompressFormat.JPEG, 100, fos);
