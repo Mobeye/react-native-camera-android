@@ -71,6 +71,7 @@ CameraView.propTypes = {
   autoFocus: PropTypes.bool,
   torchMode: PropTypes.string,
   type: PropTypes.string,
+  pictureOrientation: PropTypes.string,
   onLayout: PropTypes.bool,
   onBarCodeRead: PropTypes.func,
   onPictureTaken: PropTypes.func,
