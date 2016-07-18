@@ -1,71 +1,95 @@
 /**
  * @providesModule CameraViewAndroid
  */
-'use strict';
-
-var React = require('react-native');
-var Subscribable = require('Subscribable');
-var {
+import React, {
+  Component,
   PropTypes,
+} from 'react'
+import {
   requireNativeComponent,
   UIManager,
-  DeviceEventEmitter
-} = React;
+  DeviceEventEmitter,
+} from 'react-native'
 
-var RN_CAMERA_REF = 'cameraview';
+class CameraView extends Component {
+  constructor(props, context) {
+    super(props, context)
+    this.onPictureTaken = this.onPictureTaken.bind(this)
+    this.onChange = this.onChange.bind(this)
+    this._setRef = this._setRef.bind(this)
+    this._sub = undefined
+    this._ref = undefined
+  }
 
-var CameraView = React.createClass({
-  mixins: [Subscribable.Mixin],
-
-  onChange: function(event) {
-    if (!this.props.onBarCodeRead) return;
-
-    this.props.onBarCodeRead({
-      type: event.nativeEvent.type,
-      data: event.nativeEvent.data,
-    });
-  },
-
-  onPictureTaken: function(event) {
-    console.log(event);
-    if (!this.props.onPictureTaken) return;
-
-    this.props.onPictureTaken({
-      type: event.type,
-      message: event.message
-    })
-  },
-
-  componentWillMount: function() {
-    this.addListenerOn(
-      DeviceEventEmitter,
+  componentWillMount() {
+    this._sub = DeviceEventEmitter.addListener(
       'cameraResult',
       this.onPictureTaken
-    );
-  },
+    )
+  }
 
-  render: function() {
+  componentWillUnmount() {
+    if (this._sub) {
+      this._sub.remove()
+    }
+  }
+
+  onChange(event) {
+    const { onBarCodeRead } = this.props
+
+    if (onBarCodeRead) {
+      const { type, data } = event.nativeEvent
+      onBarCodeRead({ type, data })
+    }
+  }
+
+  takePicture() {
+    UIManager.dispatchViewManagerCommand(
+      this._getCameraLayoutHandle(),
+      UIManager.RNCameraView.Commands.takePicture,
+      null
+    )
+  }
+
+  _setRef(ref) {
+    this._ref = ref
+  }
+
+  _getCameraLayoutHandle() {
+    return React.findNodeHandle(this._ref)
+  }
+
+  onPictureTaken(event) {
+    const { onPictureTaken } = this.props
+
+    if (onPictureTaken) {
+      const { type, message } = event
+      onPictureTaken({ type, message })
+    }
+  }
+
+  render() {
     return (
       <RNCameraView
         {...this.props}
-        ref={RN_CAMERA_REF}
+        ref={this._setRef}
         onChange={this.onChange}
       />
     );
-  },
+  }
 
-  takePicture: function(opts) {
+  takePicture(opts) {
     UIManager.dispatchViewManagerCommand(
       this._getCameraLayoutHandle(),
       UIManager.RNCameraView.Commands.takePicture,
       [opts]
     );
-  },
+  }
 
-  _getCameraLayoutHandle: function() {
+  _getCameraLayoutHandle() {
     return React.findNodeHandle(this.refs[RN_CAMERA_REF]);
   }
-})
+}
 
 CameraView.propTypes = {
   autoFocus: PropTypes.bool,
@@ -90,15 +114,18 @@ CameraView.propTypes = {
   importantForAccessibility: PropTypes.string,
   accessibilityLabel: PropTypes.string,
   testID: PropTypes.string,
-  renderToHardwareTextureAndroid: PropTypes.string
-};
+  renderToHardwareTextureAndroid: PropTypes.string,
+}
 
-var RNCameraView = requireNativeComponent('RNCameraView', CameraView, {
+const RNCameraView = requireNativeComponent('RNCameraView', CameraView, {
   nativeOnly: {
     onChange: true,
     accessibilityLiveRegion: 'none',
-    accessibilityComponentType: 'button'
-  }
-});
+    accessibilityComponentType: 'button',
+  },
+})
 
-module.exports = CameraView;
+/**
+ * Use module.exports for back-compat
+ */
+module.exports = CameraView
